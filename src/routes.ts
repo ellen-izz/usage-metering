@@ -78,13 +78,14 @@ router.post("/accounts", async (req, res) => {
     }
 });
 const createUserSchema = z.object({
-    accountId: z.string().uuid(),
+
     name: z.string().trim().min(1).max(100),
     planName: z.enum(["Basic", "Premium"]),
 });
 //creates the user post
-router.post("/users", async (req, res) => {
+router.post("/users", authenticateAccount, async (req, res) => {
     const parsed = createUserSchema.safeParse(req.body);
+    const accountId = res.locals.accountId as string;
 
     if (!parsed.success) {
         res.status(400).json({
@@ -96,7 +97,7 @@ router.post("/users", async (req, res) => {
 
     try {
         const [account] = await db.select({ id: accounts.id }).from(accounts)
-            .where(eq(accounts.id, parsed.data.accountId))
+            .where(eq(accounts.id, accountId))
             .limit(1);
 
         if (!account) {
@@ -299,12 +300,14 @@ router.post("/usage", authenticateAccount, async (req, res) => {
             // Decide whether the request is allowed.
             let reason: string | null = null;
 
-            if (
-                units > accountPlan.maxUnitsPerRequest ||
-                units > userPlan.maxUnitsPerRequest
-            ) {
-                reason = "max_units_per_request_exceeded";
-            } else if (
+
+            if (units > accountPlan.maxUnitsPerRequest) {
+                reason = "account_max_units_per_request_exceeded"
+            }
+            else if (units > userPlan.maxUnitsPerRequest) {
+                reason = "user_max_units_per_request_exceeded";
+            }
+            else if (
                 accountCounter.usedUnits + units >
                 accountPlan.monthlyAllowance
             ) {

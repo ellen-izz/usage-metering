@@ -14,7 +14,7 @@ export function getAPIKey(req: Request): string {
 
     const [scheme, key] = authHeader.split(" ");
 
-    if (scheme !== "ApiKey" || !key) {
+    if (scheme !== "ApiKey" || !key || authHeader.split(" ").length !== 2) {
         throw new Error("Invalid Authorization header");
     }
 

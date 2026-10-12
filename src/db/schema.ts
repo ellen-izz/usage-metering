@@ -43,7 +43,7 @@ export const accountPlans = pgTable("account_plans", {
     id: uuid("id").primaryKey().defaultRandom(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-    name: text("name").notNull(),
+    name: text("name").notNull().unique(),//Running your seed script multiple times should not duplicate Starter and Pro plans.
 
     monthlyAllowance: integer("monthly_allowance").notNull(),
 
