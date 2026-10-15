@@ -7,7 +7,8 @@ import { db } from "./db/index.js";
 import { accounts, accountPlans, users, userPlans, accountUsageCounters, userUsageCounters, usageRequests } from "./db/schema.js";
 import { authenticateAccount } from "./auth.js";
 import { createCustomAccountPlan, createCustomUserPlan, listAvailablePlans, updateCustomAccountPlan, updateCustomUserPlan, assignAccountPlan, assignUserPlan } from "./plans.js";
-import { getAccountUsage, getUserUsage } from "./usage.js"
+import { getAccountUsage, getUserUsage, getAccountUsageHistory, getUserUsageHistory } from "./usage.js"
+
 
 
 
@@ -824,6 +825,104 @@ router.get("/users/:id/usage", authenticateAccount, async (req, res) => {
         res.status(200).json(usage);
     } catch (error: unknown) {
         console.error("Failed to retrieve User usage:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+const historyQuerySchema = z.object({
+    month: z.string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+        .optional(),
+
+    limit: z.coerce.number().int().min(1).max(100).default(10),
+
+    offset: z.coerce.number().int().min(0).default(0),
+});
+
+router.get("/account/history", authenticateAccount, async (req, res) => {
+    const parsed = historyQuerySchema.safeParse(req.query);
+    console.log("Received query:", req.query);
+    console.log("Validation result:", parsed);
+    const accountId = res.locals.accountId as string;
+
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid  history query parameters ",
+            details: parsed.error.issues,
+
+        });
+        return;
+    }
+
+    let Limits = parsed.data.limit;
+    let offset = parsed.data.offset;
+    const month =
+        parsed.data.month ??
+        new Date().toISOString().slice(0, 7);
+
+    try {
+
+        const history = await getAccountUsageHistory(accountId, month, Limits, offset);
+        res.status(200).json(history);
+
+
+    } catch (error: unknown) {
+        console.error("Failed to retrieve account history:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+router.get("/users/:id/history", authenticateAccount, async (req, res) => {
+
+    const accountId = res.locals.accountId as string;
+    const userId = req.params.id;
+    if (
+        typeof userId !== "string" ||
+        !z.string().uuid().safeParse(userId).success
+    ) {
+        res.status(400).json({
+            error: "Invalid user ID",
+        });
+        return;
+    }
+
+    const parsed = historyQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid  history query parameters ",
+            details: parsed.error.issues,
+
+        });
+        return;
+    }
+
+    let Limits = parsed.data.limit;
+    let offset = parsed.data.offset;
+    const month =
+        parsed.data.month ??
+        new Date().toISOString().slice(0, 7);
+
+    try {
+
+        const history = await getUserUsageHistory(accountId, userId, month, Limits, offset);
+        if (!history) {
+            res.status(404).json({
+                error: "User not found",
+            });
+            return;
+        }
+
+
+        res.status(200).json(history);
+
+
+    } catch (error: unknown) {
+        console.error("Failed to retrieve account history:", error);
 
         res.status(500).json({
             error: "Internal server error",
