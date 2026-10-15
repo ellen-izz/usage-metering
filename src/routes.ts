@@ -1,11 +1,14 @@
 
 import { Router } from "express";
 import { randomBytes, createHash } from "node:crypto";
-import { z } from "zod";
+import { string, z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db/index.js";
 import { accounts, accountPlans, users, userPlans, accountUsageCounters, userUsageCounters, usageRequests } from "./db/schema.js";
 import { authenticateAccount } from "./auth.js";
+import { createCustomAccountPlan, createCustomUserPlan, listAvailablePlans, updateCustomAccountPlan, updateCustomUserPlan, assignAccountPlan, assignUserPlan } from "./plans.js";
+import { getAccountUsage, getUserUsage } from "./usage.js"
+
 
 
 export const router = Router(); //creates a place to organize API endpoints
@@ -383,5 +386,447 @@ router.post("/usage", authenticateAccount, async (req, res) => {
     } catch (error: unknown) {
         console.error("Failed to process usage:", error);
         res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+
+const createCustomAccountPlanSchema = z.object({
+    name: z.string().trim().min(1).max(100),
+    monthlyAllowance: z.number().int().positive().max(2147483647),
+    maxUnitsPerRequest: z.number().int().positive().max(2147483647),
+});
+//creates the user post
+router.post("/plans/account", authenticateAccount, async (req, res) => {
+    const parsed = createCustomAccountPlanSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid plan data",
+            details: parsed.error.issues,
+        });
+        return;
+    }
+    //This prevents clients from creating plans under another account's identity.
+    const accountId = res.locals.accountId as string;
+    try {
+        const plan = await createCustomAccountPlan(
+            accountId,
+            parsed.data.name,
+            parsed.data.monthlyAllowance,
+            parsed.data.maxUnitsPerRequest,
+        );
+        res.status(201).json({ plan });
+    } catch (error: unknown) {
+        const dbError =
+            error instanceof Error && "cause" in error
+                ? error.cause
+                : error;
+
+        if (
+            typeof dbError === "object" &&
+            dbError !== null &&
+            "code" in dbError &&
+            dbError.code === "23505"
+        ) {
+            res.status(409).json({
+                error: "A plan with this name already exists",
+            });
+            return;
+        }
+
+        console.error("Failed to create custom account plan:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+const createCustomUserPlanSchema = z.object({
+    name: z.string().trim().min(1).max(100),
+    monthlyAllowance: z.number().int().positive().max(2147483647),
+    maxUnitsPerRequest: z.number().int().positive().max(2147483647),
+});
+
+router.post("/plans/user", authenticateAccount, async (req, res) => {
+    const parsed = createCustomUserPlanSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid plan data",
+            details: parsed.error.issues,
+        });
+        return;
+    }
+    //This prevents clients from creating plans under another account's identity.
+    const accountId = res.locals.accountId as string;
+    try {
+        const plan = await createCustomUserPlan(
+            accountId,
+            parsed.data.name,
+            parsed.data.monthlyAllowance,
+            parsed.data.maxUnitsPerRequest,
+        );
+        res.status(201).json({ plan });
+    } catch (error: unknown) {
+        const dbError =
+            error instanceof Error && "cause" in error
+                ? error.cause
+                : error;
+
+        if (
+            typeof dbError === "object" &&
+            dbError !== null &&
+            "code" in dbError &&
+            dbError.code === "23505"
+        ) {
+            res.status(409).json({
+                error: "A plan with this name already exists",
+            });
+            return;
+        }
+
+        console.error("Failed to create custom user plan:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+router.get("/plans", authenticateAccount, async (_req, res) => {
+    const accountId = res.locals.accountId as string;
+
+    try {
+        const plans = await listAvailablePlans(accountId);
+
+        res.status(200).json(plans);
+    } catch (error: unknown) {
+        console.error("Failed to list plans:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+const updateCustomAccountPlanSchema = z.object({
+    name: z.string().trim().min(1).max(100),
+    monthlyAllowance: z.number().int().positive().max(2147483647),
+    maxUnitsPerRequest: z.number().int().positive().max(2147483647),
+});
+router.patch("/plans/account/:id", authenticateAccount, async (req, res) => {
+    const parsed = updateCustomAccountPlanSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid plan data",
+            details: parsed.error.issues,
+        });
+        return;
+    }
+    const planId = req.params.id;
+    if (typeof planId !== "string" || !z.uuid().safeParse(planId).success) {
+        res.status(400).json({
+            error: "Invalid plan ID",
+        });
+        return;
+    }
+    const accountId = res.locals.accountId as string;
+    try {
+        const updatedPlan = await updateCustomAccountPlan(
+            accountId,
+            planId,
+            parsed.data.name,
+            parsed.data.monthlyAllowance,
+            parsed.data.maxUnitsPerRequest
+
+        );
+        if (!updatedPlan) {
+            res.status(404).json({
+                error: "Custom account plan not found",
+            });
+            return;
+        }
+
+        res.status(200).json({
+            plan: updatedPlan,
+        });
+
+    } catch (error: unknown) {
+
+        const dbError =
+            error instanceof Error && "cause" in error
+                ? error.cause
+                : error;
+
+        if (
+            typeof dbError === "object" &&
+            dbError !== null &&
+            "code" in dbError &&
+            dbError.code === "23505"
+        ) {
+            res.status(409).json({
+                error: "A plan with this name already exists",
+            });
+            return;
+        }
+
+        console.error("Failed to update custom account plan:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+const updateCustomUserPlanSchema = z.object({
+    name: z.string().trim().min(1).max(100),
+    monthlyAllowance: z.number().int().positive().max(2147483647),
+    maxUnitsPerRequest: z.number().int().positive().max(2147483647),
+});
+router.patch("/plans/user/:id", authenticateAccount, async (req, res) => {
+    const parsed = updateCustomUserPlanSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid plan data",
+            details: parsed.error.issues,
+        });
+        return;
+    }
+    const planId = req.params.id;
+    if (typeof planId !== "string" || !z.uuid().safeParse(planId).success) {
+        res.status(400).json({
+            error: "Invalid plan ID",
+        });
+        return;
+    }
+    const accountId = res.locals.accountId as string;
+    try {
+        const updatedPlan = await updateCustomUserPlan(
+            accountId,
+            planId,
+            parsed.data.name,
+            parsed.data.monthlyAllowance,
+            parsed.data.maxUnitsPerRequest
+
+        );
+        if (!updatedPlan) {
+            res.status(404).json({
+                error: "Custom user plan not found",
+            });
+            return;
+        }
+
+        res.status(200).json({
+            plan: updatedPlan,
+        });
+
+    } catch (error: unknown) {
+
+        const dbError =
+            error instanceof Error && "cause" in error
+                ? error.cause
+                : error;
+
+        if (
+            typeof dbError === "object" &&
+            dbError !== null &&
+            "code" in dbError &&
+            dbError.code === "23505"
+        ) {
+            res.status(409).json({
+                error: "A plan with this name already exists",
+            });
+            return;
+        }
+
+        console.error("Failed to update custom user plan:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+const assignAccountPlanSchema = z.object({
+    planId: z.string().uuid(),
+});
+router.patch("/account/plan", authenticateAccount, async (req, res) => {
+
+    const parsed = assignAccountPlanSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid plan assignment data",
+            details: parsed.error.issues,
+        });
+        return;
+    }
+
+    const accountId = res.locals.accountId as string;
+
+    try {
+        const result = await assignAccountPlan(
+            accountId,
+            parsed.data.planId
+        );
+
+        if (!result) {
+            res.status(404).json({
+                error: "Plan not found or not accessible",
+            });
+            return;
+        }
+
+        res.status(200).json({
+            message: "Account plan updated successfully",
+            account: result.account,
+            plan: result.plan,
+        });
+
+    } catch (error: unknown) {
+        console.error("Failed to assign account plan:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+
+const assignUserPlanSchema = z.object({
+    planId: z.string().uuid(),
+});
+
+router.patch("/users/:id/plan", authenticateAccount, async (req, res) => {
+
+    const parsed = assignUserPlanSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "Invalid plan assignment data",
+            details: parsed.error.issues,
+        });
+        return;
+    }
+
+    const userId = req.params.id;
+
+    if (
+        typeof userId !== "string" ||
+        !z.string().uuid().safeParse(userId).success
+    ) {
+        res.status(400).json({
+            error: "Invalid user ID",
+        });
+        return;
+    }
+
+    const accountId = res.locals.accountId as string;
+
+    try {
+        const result = await assignUserPlan(
+            accountId,
+            userId,
+            parsed.data.planId
+        );
+
+        if (!result) {
+            res.status(404).json({
+                error: "User or plan not found or not accessible",
+            });
+            return;
+        }
+
+        res.status(200).json({
+            message: "User plan updated successfully",
+            user: result.user,
+            plan: result.plan,
+        });
+
+    } catch (error: unknown) {
+        console.error("Failed to assign user plan:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+
+const monthSchema = z.string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+    .optional();
+
+router.get("/account/usage", authenticateAccount, async (req, res) => {
+    const accountId = res.locals.accountId as string;
+    const parsedMonth = monthSchema.safeParse(req.query.month);
+    if (!parsedMonth.success) {
+        res.status(400).json({
+            error: "Invalid month. Expected YYYY-MM",
+        });
+        return;
+    }
+    const month = parsedMonth.data
+        ? `${parsedMonth.data}-01`
+        : undefined;
+
+
+    try {
+        const usage = await getAccountUsage(accountId, month);
+        if (!usage) {
+            res.status(400).json({
+                error: "Account not found"
+            });
+            return;
+        }
+
+
+        res.status(200).json(usage);
+    } catch (error: unknown) {
+        console.error("Failed to retrieve account usage:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+
+router.get("/users/:id/usage", authenticateAccount, async (req, res) => {
+    const accountId = res.locals.accountId as string;
+    const parsedMonth = monthSchema.safeParse(req.query.month);
+    if (!parsedMonth.success) {
+        res.status(400).json({
+            error: "Invalid month. Expected YYYY-MM",
+        });
+        return;
+    }
+    const userId = req.params.id;
+    if (typeof userId !== "string" || !z.string().uuid().safeParse(userId).success) {
+        res.status(400).json({
+            error: "Invalid user ID",
+        });
+        return;
+    }
+
+    const month = parsedMonth.data
+        ? `${parsedMonth.data}-01`
+        : undefined;
+
+
+    try {
+        const usage = await getUserUsage(accountId, userId, month);
+        if (!usage) {
+            res.status(404).json({
+                error: "User not found"
+            });
+            return;
+        }
+
+
+        res.status(200).json(usage);
+    } catch (error: unknown) {
+        console.error("Failed to retrieve User usage:", error);
+
+        res.status(500).json({
+            error: "Internal server error",
+        });
     }
 });

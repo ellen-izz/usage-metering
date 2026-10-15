@@ -1,8 +1,9 @@
 
+import { sql } from "drizzle-orm"
 import {
-    pgTable, timestamp, uuid, text, integer, boolean, date, unique,
+    pgTable, timestamp, uuid, text, integer, boolean, date, unique, uniqueIndex, check,
 } from "drizzle-orm/pg-core";
-
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 export const accounts = pgTable("accounts", {
     id: uuid("id").primaryKey().defaultRandom(),
 
@@ -43,35 +44,90 @@ export const accountPlans = pgTable("account_plans", {
     id: uuid("id").primaryKey().defaultRandom(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-    name: text("name").notNull().unique(),//Running your seed script multiple times should not duplicate Starter and Pro plans.
+    name: text("name").notNull(),
+    //We need uniqueness within an account, not across all accounts.
 
     monthlyAllowance: integer("monthly_allowance").notNull(),
 
     maxUnitsPerRequest: integer("max_units_per_request").notNull(),
 
+    ownerAccountId: uuid("owner_account_id")
+        .references(
+            (): AnyPgColumn => accounts.id,
+            { onDelete: "cascade" }
+        ),//preventing circular type-inference errors between 
+    //accounts and accountPlans without changing the database relationship.
     isBuiltIn: boolean("is_built_in").notNull().default(true),
+},
+    (table) => [
+        uniqueIndex("account_plan_owner_name_unique")
+            .on(table.ownerAccountId, table.name)
+            .where(sql`${table.ownerAccountId} IS NOT NULL`),
+
+        uniqueIndex("account_plan_builtin_name_unique")
+            .on(table.name)
+            .where(sql`${table.isBuiltIn} = true`),
+
+        check(
+            "account_plan_owner_check",
+            sql`(${table.isBuiltIn} = true AND ${table.ownerAccountId} IS NULL)
+                OR
+                (${table.isBuiltIn} = false AND ${table.ownerAccountId} IS NOT NULL)`
+        ),
+
+        check(
+            "account_plan_limits_check",
+            sql`${table.monthlyAllowance} > 0 AND ${table.maxUnitsPerRequest} > 0`
+        ),
+    ],
 
 
 
-
-});
+);
 
 
 export const userPlans = pgTable("user_plans", {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    name: text("name").notNull().unique(),
+    name: text("name").notNull(),
 
     monthlyAllowance: integer("monthly_allowance").notNull(),
 
     maxUnitsPerRequest: integer("max_units_per_request").notNull(),
+    ownerAccountId: uuid("owner_account_id")
+        .references(
+            (): AnyPgColumn => accounts.id,
+            { onDelete: "cascade" }
+        ),
+    isBuiltIn: boolean("is_built_in").notNull().default(true),
+
 
     createdAt: timestamp("created_at", { withTimezone: true })
         .notNull()
         .defaultNow(),
-});
+},
+    (table) => [
+        uniqueIndex("user_plan_owner_name_unique")
+            .on(table.ownerAccountId, table.name)
+            .where(sql`${table.ownerAccountId} IS NOT NULL`),
 
+        uniqueIndex("user_plan_builtin_name_unique")
+            .on(table.name)
+            .where(sql`${table.isBuiltIn} = true`),
 
+        check(
+            "user_plan_owner_check",
+            sql`(${table.isBuiltIn} = true AND ${table.ownerAccountId} IS NULL)
+                OR
+                (${table.isBuiltIn} = false AND ${table.ownerAccountId} IS NOT NULL)`
+        ),
+
+        check(
+            "user_plan_limits_check",
+            sql`${table.monthlyAllowance} > 0 AND ${table.maxUnitsPerRequest} > 0`
+        ),
+    ],
+);
 
 // Account usage counters: one counter per account per month
 export const accountUsageCounters = pgTable(
