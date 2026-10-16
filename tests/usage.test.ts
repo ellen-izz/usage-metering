@@ -419,7 +419,8 @@ User max/request	150 ≤ 100	Fail*/
     });
 
 
-    //premium
+    //checks whether multiple requests arriving at nearly 
+    // the same time can accidentally consume more units than an account is allowed.
     it("prevents concurrent requests from exceeding monthly quotas", async () => {
         // Create a separate account for concurrency testing.
         const accountResponse = await request(app)
@@ -448,20 +449,25 @@ User max/request	150 ≤ 100	Fail*/
 
             const concurrencyUserId = userResponse.body.user.id;
 
-            // Create 20 HTTP request promises, each requesting 1,000 units.
-            const requests = Array.from({ length: 20 }, () =>
-                request(app)
-                    .post("/api/usage")
-                    .set("Authorization", `ApiKey ${concurrencyApiKey}`)
-                    .set("Idempotency-Key", randomBytes(16).toString("hex"))
-                    .send({
-                        userId: concurrencyUserId,
-                        units: 1000,
-                    })
-                    .then(response => response)
-            );
 
-            // Execute all 20 requests concurrently.
+            //now create 20 request each requesting 1000 units
+            // 
+            const requests = [];
+
+            for (let i = 0; i < 20; i++) {
+                requests.push(
+                    request(app)
+                        .post("/api/usage")
+                        .set("Authorization", `ApiKey ${concurrencyApiKey}`)
+                        .set("Idempotency-Key", randomBytes(16).toString("hex"))
+                        .send({
+                            userId: concurrencyUserId,
+                            units: 1000,
+                        })
+                        .then(response => response)
+                );
+            }
+            // Wait for all 20 requests to finish.
             const responses = await Promise.all(requests);
 
             const accepted = responses.filter(r => r.body.allowed === true);
@@ -507,6 +513,43 @@ User max/request	150 ≤ 100	Fail*/
             });
         }
     });
+    it("prevents an account from consuming another account's user quota", async () => {
+        //create user B 
+        const accountResponse = await request(app)
+            .post("/api/accounts")
+            .send({
+                name: `IsolatedTest-${randomBytes(8).toString("hex")}`,
+                planName: "Starter",
+            });
+
+        expect(accountResponse.status).toBe(201);
+
+        const accountBId = accountResponse.body.account.id;
+        const accountBKey = accountResponse.body.apiKey;
+        try {
+            // Account B attempts to use Account A's userId.
+            const response = await request(app)
+                .post("/api/usage")
+                .set("Authorization", `ApiKey ${accountBKey}`)
+                .set("Idempotency-Key", randomBytes(16).toString("hex"))
+                .send({
+                    userId, // This belongs to Account A, save earlier in beforeAll()
+                    units: 10,
+                });
+
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe(
+                "User not found in this account"
+            );
+
+        } finally {
+            // Account B has no users or accepted usage records.
+            await db.delete(accounts)
+                .where(eq(accounts.id, accountBId));
+        }
+
+    });
+
 
 
 });
