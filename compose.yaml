@@ -1,0 +1,48 @@
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: usage_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: usage_metering
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U usage_app -d usage_metering"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  init:
+    image: usage-metering-api:1.0
+    environment:
+      DATABASE_URL: postgres://usage_app:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/usage_metering
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npx drizzle-kit migrate
+        npx tsx src/db/seed.ts
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: usage-metering-api:1.0
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://usage_app:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/usage_metering
+    ports:
+      - "8080:8080"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
