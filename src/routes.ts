@@ -81,6 +81,44 @@ router.post("/accounts", async (req, res) => {
         res.status(500).json({ error: "Internal server error" });
     }
 });
+
+router.get("/users", authenticateAccount, async (_req, res) => {
+    try {
+        const accountId = res.locals.accountId as string;
+
+        const accountUsers = await db
+            .select({
+                id: users.id,
+                name: users.name,
+                userPlanId: users.userPlanId,
+            })
+            .from(users)
+            .where(eq(users.accountId, accountId));
+
+        return res.status(200).json({
+            users: accountUsers,
+        });
+    } catch (error) {
+        console.error("Failed to retrieve users:", error);
+
+        return res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
 const createUserSchema = z.object({
 
     name: z.string().trim().min(1).max(100),
