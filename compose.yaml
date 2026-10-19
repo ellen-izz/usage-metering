@@ -17,6 +17,9 @@ services:
       retries: 10
 
   init:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: usage-metering-api:1.0
     environment:
       DATABASE_URL: postgres://usage_app:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/usage_metering
@@ -33,6 +36,9 @@ services:
     restart: "no"
 
   api:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: usage-metering-api:1.0
     environment:
       NODE_ENV: production
@@ -45,6 +51,9 @@ services:
     restart: unless-stopped
 
   client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
     image: usage-metering-client:1.0
     ports:
       - "127.0.0.1:3000:80"

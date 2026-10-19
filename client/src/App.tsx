@@ -53,6 +53,22 @@ type UserUsage = {
   };
 };
 
+type Plan = {
+  id: string;
+  name: string;
+  monthlyAllowance: number;
+  maxUnitsPerRequest: number;
+  ownerAccountId: string | null;
+  isBuiltIn: boolean;
+  createdAt: string;
+};
+
+type PlansResponse = {
+  accountPlans: Plan[];
+  userPlans: Plan[];
+};
+
+
 
 
 
@@ -77,6 +93,19 @@ function App() {
   const historyPageSize = 10;
 
 
+  const [plans, setPlans] = useState<PlansResponse>({
+    accountPlans: [],
+    userPlans: [],
+  });
+
+  const [plansMessage, setPlansMessage] = useState("");
+
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+
+  const [planChangeMessage, setPlanChangeMessage] = useState("");
+
+  const [selectedAccountPlanId, setSelectedAccountPlanId] = useState("");
+  const [accountPlanMessage, setAccountPlanMessage] = useState("");
 
 
 
@@ -105,6 +134,7 @@ function App() {
       await loadHistory(apiKey);
 
       setMessage("Account connected successfully!");
+      void loadPlans(apiKey);
     } catch {
       setMessage("Cannot connect to the backend.");
     }
@@ -302,6 +332,129 @@ function App() {
     }
   }
 
+  async function changeAccountPlan() {
+    if (!selectedAccountPlanId) {
+      setAccountPlanMessage("Select a company plan first.");
+      return;
+    }
+
+    setAccountPlanMessage("Changing company plan...");
+
+    try {
+      const response = await fetch("/api/account/plan", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `ApiKey ${apiKey.trim()}`,
+        },
+        body: JSON.stringify({
+          planId: selectedAccountPlanId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setAccountPlanMessage(
+          data.error || "Failed to change company plan."
+        );
+        return;
+      }
+
+      setAccountPlanMessage("Company plan changed successfully!");
+
+      const usageResponse = await fetch("/api/account/usage", {
+        headers: {
+          Authorization: `ApiKey ${apiKey.trim()}`,
+        },
+      });
+
+      if (!usageResponse.ok) {
+        setAccountPlanMessage(
+          "Plan changed, but could not refresh company usage."
+        );
+        return;
+      }
+
+      setUsage(await usageResponse.json());
+      setSelectedAccountPlanId("");
+    } catch (error) {
+      console.error("Failed to change company plan:", error);
+      setAccountPlanMessage(
+        "Could not complete or verify the update. Refresh to check the current plan."
+      );
+    }
+  }
+
+
+  async function changeUserPlan() {
+    if (!usageUserId || !selectedPlanId) {
+      setPlanChangeMessage("Select a user and a plan first.");
+      return;
+    }
+
+    setPlanChangeMessage("Changing user plan...");
+
+    try {
+      const response = await fetch(
+        `/api/users/${usageUserId}/plan`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `ApiKey ${apiKey.trim()}`,
+          },
+          body: JSON.stringify({
+            planId: selectedPlanId,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        setPlanChangeMessage(
+          data.error || "Failed to change user plan."
+        );
+        return;
+      }
+
+      setPlanChangeMessage("User plan changed successfully!");
+
+      // Refresh the user list and quota information.
+      await loadUsers(apiKey);
+      await loadUserUsage(usageUserId, apiKey);
+      setSelectedPlanId("");
+    } catch (error) {
+      console.error("Failed to change user plan:", error);
+      setPlanChangeMessage("Cannot connect to the backend.");
+    }
+  }
+
+
+  async function loadPlans(key: string) {
+    try {
+      const response = await fetch("/api/plans", {
+        headers: {
+          Authorization: `ApiKey ${key.trim()}`,
+        },
+      });
+
+      if (!response.ok) {
+        setPlansMessage("Failed to load plans.");
+        return;
+      }
+
+      const data: PlansResponse = await response.json();
+
+      setPlans(data);
+      setPlansMessage("");
+    } catch (error) {
+      console.error("Failed to load plans:", error);
+      setPlansMessage("Cannot connect to the backend.");
+    }
+  }
+
+
 
 
 
@@ -393,6 +546,73 @@ function App() {
             </p>
           </section>
 
+          {/* Available Subscription Plans */}
+          <section className="user-section">
+            <h2>Available Subscription Plans</h2>
+
+            <div className="user-form">
+              <select
+                value={selectedAccountPlanId}
+                onChange={(event) =>
+                  setSelectedAccountPlanId(event.target.value)
+                }
+              >
+                <option value="">Choose a company plan</option>
+
+                {plans.accountPlans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} — {plan.monthlyAllowance.toLocaleString()} units/month
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={changeAccountPlan}
+                disabled={!selectedAccountPlanId}
+              >
+                Change Company Plan
+              </button>
+            </div>
+
+            <p>{accountPlanMessage}</p>
+
+
+            <p>{plansMessage}</p>
+
+            <h3>Company Plans</h3>
+
+            {plans.accountPlans.map((plan) => (
+              <div key={plan.id}>
+                <p>
+                  <strong>{plan.name}</strong>
+                  {" — "}
+                  {plan.monthlyAllowance.toLocaleString()} units/month
+                  {" | "}
+                  {plan.maxUnitsPerRequest.toLocaleString()} max/request
+                  {" | "}
+                  {plan.isBuiltIn ? "Predefined" : "Custom"}
+                </p>
+              </div>
+            ))}
+
+            <h3>User Plans</h3>
+
+            {plans.userPlans.map((plan) => (
+              <div key={plan.id}>
+                <p>
+                  <strong>{plan.name}</strong>
+                  {" — "}
+                  {plan.monthlyAllowance.toLocaleString()} units/month
+                  {" | "}
+                  {plan.maxUnitsPerRequest.toLocaleString()} max/request
+                  {" | "}
+                  {plan.isBuiltIn ? "Predefined" : "Custom"}
+                </p>
+              </div>
+            ))}
+          </section>
+
+
           {/* Create User */}
           <section className="user-section">
             <h2>Create User</h2>
@@ -445,6 +665,25 @@ function App() {
                   </option>
                 ))}
               </select>
+              <select
+                value={selectedPlanId}
+                onChange={(event) => setSelectedPlanId(event.target.value)}
+              >
+                <option value="">Choose a new user plan</option>
+
+                {plans.userPlans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} — {plan.monthlyAllowance.toLocaleString()} units/month
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={changeUserPlan}
+                disabled={!usageUserId || !selectedPlanId}
+              >
+                Change User Plan
+              </button>
+              <p>{planChangeMessage}</p>
 
               <input
                 type="number"
