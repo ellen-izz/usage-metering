@@ -252,6 +252,27 @@ cd client
 npm ci
 npm run build
 ```
+## Database Migrations (Development)
+
+The project uses Drizzle ORM to manage the PostgreSQL schema.
+
+Database schema definitions are located in `src/db/schema.ts`.
+
+After modifying the schema, generate a new migration from the project root:
+
+```bash
+npx drizzle-kit generate
+```
+
+Apply the migration:
+
+```bash
+npx drizzle-kit migrate
+```
+
+Ensure the database is running and the local database connection is configured before running the migration.
+
+**Note:** Normal Docker deployment automatically applies existing migrations through the `init` service. Reviewers do not need to run these commands separately.
 
 ## Performance Results
 
