@@ -14,7 +14,8 @@ This dashboard provides a user-friendly interface for interacting with the backe
 - Switch company and user subscription plans.
 - View paginated usage history.
 
-## Run with Docker (Recommended)
+##  Run with Docker (Recommended)
+
 
 From the project root:
 
