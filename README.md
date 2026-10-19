@@ -286,6 +286,7 @@ Local benchmarks against the Docker-hosted API:
 
 The write benchmark processed **250 accepted requests with 0 errors** in 10.66 seconds. All writes targeted one account, creating lock contention.
 
+
 Reproduce read benchmarks with Autocannon:
 
 ```bash
@@ -305,6 +306,29 @@ ALLOW_USAGE_BENCHMARK=yes node benchmarks/usage-benchmark.mjs
 **Warning:** The write benchmark creates an account and usage records without automatically deleting them. Run it only against an isolated test database and clean up afterward.
 
 Measurements are environment-specific and not production throughput guarantees.
+
+### Multi-Company Performance Comparison
+
+To investigate database lock contention, usage-write performance was tested under two scenarios with 250 requests and 10 concurrent workers.
+
+| Scenario | Throughput | Average Latency | Errors |
+|---|---:|---:|---:|
+| 1 company, 10 workers | 23.45 req/s | 422.20 ms | 0 |
+| 10 companies, 10 workers | 57.58 req/s | 176.76 ms | 0 |
+
+The multi-company result is the average of three runs using the default Postgres.js connection pool of 10 connections.
+
+**Observation:** Distributing requests across companies improved throughput because requests did not all contend for the same company row lock. Performance still varied across runs.
+
+To reproduce the multi-company benchmark:
+
+```bash
+ALLOW_USAGE_BENCHMARK=yes node benchmarks/multi-account-benchmark.mjs
+```
+
+Run benchmarks only against an isolated development or test database. The script creates 10 companies and 250 usage records per run and does not automatically delete them.
+
+These results are environment-specific and are not production performance guarantees.
 
 ## Security and Limitations
 
