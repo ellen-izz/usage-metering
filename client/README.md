@@ -1,75 +1,67 @@
-# React + TypeScript + Vite
+# Usage Metering Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React + TypeScript frontend for the Usage Metering and Quota Service.
 
-Currently, two official plugins are available:
+This dashboard provides a user-friendly interface for interacting with the backend API and monitoring company and user consumption.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Features
 
-## React Compiler
+- Connect to a company using its API key.
+- View company and user subscription plans.
+- Monitor monthly usage and remaining quotas.
+- Create Basic and Premium users.
+- Submit usage requests and view acceptance or rejection reasons.
+- Switch company and user subscription plans.
+- View paginated usage history.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Run with Docker (Recommended)
 
-## Expanding the ESLint configuration
+From the project root:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+cp .env.docker.example .env.docker
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Configure the database password, then run:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+docker compose --env-file .env.docker up --build -d
 ```
+
+Open **http://localhost:3000**.
+
+Create a company using the backend API and enter its generated API key to connect.
+
+## Frontend Development
+
+Requirements: Node.js and npm, with the backend API running on port 8080.
+
+From the `client` directory:
+
+```bash
+npm ci
+npm run dev
+```
+
+Open **http://localhost:5173**.
+
+For a production frontend build:
+
+```bash
+npm run build
+```
+
+## Technology
+
+- React
+- TypeScript
+- Vite
+- Nginx (Docker deployment)
+
+## Notes
+
+The dashboard is intended for local demonstration and development. Company API keys are entered manually; production use would require a more secure administrator authentication system.
+
+Custom-plan creation and editing are supported through the backend REST API rather than dashboard forms.
+
+For API documentation, project architecture, tests, and demonstration instructions, see the [main README](../README.md).
